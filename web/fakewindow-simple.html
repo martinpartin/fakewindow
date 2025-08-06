@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fake Window – Justerbar</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+    }
+    #canvasWrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #bgImage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 200%;
+      height: 200%;
+      transform: translate(-50%, -50%);
+      will-change: transform;
+    }
+    video {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvasWrapper">
+    <img id="bgImage" src="https://images.unsplash.com/photo-1506744038136-46273834b3fb" alt="Fake window" />
+  </div>
+  <video id="video" autoplay playsinline></video>
+
+  <script src="https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <script>
+    // === ✅ JUSTER HER ===
+    const VIDEO_WIDTH = 640;
+    const VIDEO_HEIGHT = 480;
+    const MOVEMENT_SCALE = 50;    // hvor mye bakgrunnen beveger seg
+    const DETECTION_FPS = 30;     // hvor ofte vi gjør detection (maks 60)
+    const USE_LERP = true;        // smooth overgang
+    const LERP_SPEED = 0.2;       // hvor raskt den interpolerer (0.1 = treg, 1 = momentant)
+    // =====================
+
+    const video = document.getElementById('video');
+    const bgImage = document.getElementById('bgImage');
+
+    let targetX = 0, targetY = 0;
+    let currentX = 0, currentY = 0;
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: VIDEO_WIDTH, height: VIDEO_HEIGHT }
+      });
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
+    async function startTracking() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+
+      let lastDetectionTime = 0;
+      const detectionInterval = 1000 / DETECTION_FPS;
+
+      async function render(timestamp) {
+        if (timestamp - lastDetectionTime >= detectionInterval) {
+          const result = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+          lastDetectionTime = timestamp;
+
+          if (result && result.box) {
+            const { x, y, width, height } = result.box;
+            const headX = x + width / 2;
+            const headY = y + height / 2;
+
+            const centerX = video.videoWidth / 2;
+            const centerY = video.videoHeight / 2;
+
+            const dx = (headX - centerX) / centerX;
+            const dy = (headY - centerY) / centerY;
+
+            targetX = dx * MOVEMENT_SCALE;
+            targetY = -dy * MOVEMENT_SCALE;
+          }
+        }
+
+        if (USE_LERP) {
+          currentX += (targetX - currentX) * LERP_SPEED;
+          currentY += (targetY - currentY) * LERP_SPEED;
+        } else {
+          currentX = targetX;
+          currentY = targetY;
+        }
+
+        bgImage.style.transform = `translate(calc(-50% + ${-currentX}px), calc(-50% + ${-currentY}px))`;
+        requestAnimationFrame(render);
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    setupCamera().then(() => {
+      video.play();
+      startTracking();
+    });
+  </script>
+</body>
+</html>
